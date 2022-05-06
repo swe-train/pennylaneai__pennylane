@@ -568,6 +568,7 @@ class DefaultQubit(QubitDevice):
             returns_state=True,
             passthru_devices={
                 "tf": "default.qubit.tf",
+                "tensorflow": "default.qubit.tf",
                 "torch": "default.qubit.torch",
                 "autograd": "default.qubit.autograd",
                 "jax": "default.qubit.jax",
