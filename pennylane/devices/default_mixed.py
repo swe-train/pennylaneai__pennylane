@@ -279,7 +279,9 @@ class DefaultMixed(QubitDevice):
             f"{kraus_index}{col_indices}{new_col_indices}->{new_state_indices}"
         )
 
-        self._state = qnp.einsum(einsum_indices, kraus, self._state, kraus_dagger)
+        self._state = qnp.einsum(
+            einsum_indices, kraus, self._state, kraus_dagger, optimize="greedy"
+        )
 
     def _apply_diagonal_unitary(self, eigvals, wires):
         r"""Apply a diagonal unitary gate specified by a list of eigenvalues. This method uses

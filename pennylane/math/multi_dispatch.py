@@ -507,7 +507,7 @@ def stack(values, axis=0, like=None):
     return np.stack(values, axis=axis, like=like)
 
 
-def einsum(indices, *operands, like=None):
+def einsum(indices, *operands, like=None, **kwargs):
     """Evaluates the Einstein summation convention on the operands.
 
     Args:
@@ -556,7 +556,7 @@ def einsum(indices, *operands, like=None):
     if like is None:
         like = _multi_dispatch(operands)
     operands = np.coerce(operands, like=like)
-    return np.einsum(indices, *operands, like=like)
+    return np.einsum(indices, *operands, like=like, **kwargs)
 
 
 def where(condition, x=None, y=None):
