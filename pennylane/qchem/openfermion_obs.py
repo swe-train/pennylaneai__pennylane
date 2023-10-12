@@ -21,6 +21,7 @@ import numpy as np
 
 import pennylane as qml
 from pennylane.operation import active_new_opmath
+from .basis_data import _extended_atomic_numbers
 
 # Bohr-Angstrom correlation coefficient (https://physics.nist.gov/cgi-bin/cuu/Value?bohrrada0)
 bohr_angs = 0.529177210903
@@ -575,18 +576,7 @@ def dipole_of(
     """
     openfermion, _ = _import_of()
 
-    atomic_numbers = {
-        "H": 1,
-        "He": 2,
-        "Li": 3,
-        "Be": 4,
-        "B": 5,
-        "C": 6,
-        "N": 7,
-        "O": 8,
-        "F": 9,
-        "Ne": 10,
-    }
+    atomic_numbers = _extended_atomic_numbers
 
     if mult != 1:
         raise ValueError(
@@ -597,8 +587,7 @@ def dipole_of(
     for i in symbols:
         if i not in atomic_numbers:
             raise ValueError(
-                f"Currently, only first- or second-row elements of the periodic table are supported;"
-                f" got element {i}"
+                f"Requested element {i} does not exist in the periodic table."
             )
 
     hf_file = qml.qchem.meanfield(symbols, coordinates, name, charge, mult, basis, package, outpath)

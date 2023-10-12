@@ -22,7 +22,7 @@ import collections
 
 from pennylane import numpy as np
 
-from .basis_data import atomic_numbers
+from .basis_data import atomic_numbers, _extended_atomic_numbers
 from .basis_set import BasisFunction, mol_basis_data
 from .integrals import contracted_norm, primitive_norm
 
@@ -74,6 +74,7 @@ class Molecule:
         coeff=None,
         normalize=True,
     ):
+
         if (
             basis_name.lower()
             not in [
@@ -82,16 +83,16 @@ class Molecule:
                 "6-311g",
                 "cc-pvdz",
             ]
-            and load_data is False
-        ):
+        ) and load_data is False:
             raise ValueError(
                 "Currently, the only supported basis sets are 'sto-3g', '6-31g', '6-311g' and "
                 "'cc-pvdz'. Please consider using `load_data=True` to download the basis set from "
                 "an external library that can be installed with: pip install basis-set-exchange."
             )
 
-        if set(symbols) - set(atomic_numbers):
-            raise ValueError(f"Atoms in {set(symbols) - set(atomic_numbers)} are not supported.")
+        supported_symbols = atomic_numbers if not load_data else _extended_atomic_numbers
+        if set(symbols) - set(supported_symbols):
+            raise ValueError(f"Atoms in {set(symbols) - set(supported_symbols)} are not supported.")
 
         self.symbols = symbols
         self.coordinates = coordinates
