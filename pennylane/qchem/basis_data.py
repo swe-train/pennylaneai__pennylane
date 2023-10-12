@@ -818,7 +818,10 @@ def load_basisset(basis, element):
         "[6]": "I",
     }
 
-    element = str(_extended_atomic_numbers[element])
+    try:
+        element = str(_extended_atomic_numbers[element])
+    except KeyError as exc:
+        raise NotImplementedError(f"Requested element {element} does not exist in the periodic table")
 
     data = bse.get_basis(basis)["elements"][element]["electron_shells"]
 
