@@ -106,10 +106,11 @@ def snapshots(qnode):
 
 def breakpoint():
     qcontext= qml.QueuingManager.active_context()
+    print(qcontext)
     dev = qml.device('default.qubit')
     @qml.qnode(dev)
     def circuit():
-        for op in qcontext:
+        for op in qcontext.items():
             qml.apply(op[0])
         return qml.state()
     
