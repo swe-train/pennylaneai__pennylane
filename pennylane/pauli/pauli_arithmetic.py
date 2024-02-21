@@ -15,7 +15,8 @@
 # pylint:disable=protected-access
 import warnings
 from copy import copy
-from functools import reduce, lru_cache
+from functools import reduce, lru_cache, wraps
+from sys import getsizeof
 from typing import Iterable
 
 import numpy as np
@@ -95,6 +96,38 @@ def _cached_sparse_data(op):
 def _cached_arange(n):
     "Caches `np.arange` output to speed up sparse calculations."
     return np.arange(n)
+
+
+def _memoize(func):
+    r"""
+    Decorator for caching function results and tracking memory usage.
+
+    It should be used as a double-check instead of `@lru_cache`
+    only for explicitly tracking the memory usage in the cache
+    (additional overhead is introduced and a `dict` is created).
+
+    """
+
+    cache = lru_cache(maxsize=None)(func)
+    cache_mem_tracker = {}
+
+    @wraps(func)
+    def memoizer(self, other, debug=False):
+        result = cache(self, other)
+        if (str(self), str(other)) not in cache_mem_tracker:
+            if debug:
+                print("New combination in internal dict. Storing...")
+            cache_mem_tracker[(str(self), str(other))] = getsizeof(result)
+        return result
+
+    memoizer.cache = cache
+    memoizer.cache_mem_tracker = cache_mem_tracker
+
+    # optional but useful
+    memoizer.tot_cache_mem_allocated = lambda: sum(cache_mem_tracker.values())
+    memoizer.clear = lambda: (cache_mem_tracker.clear(), cache.cache_clear())
+
+    return memoizer
 
 
 pauli_to_sparse_int = {I: 0, X: 1, Y: 1, Z: 0}  # (I, Z) and (X, Y) have the same sparsity
@@ -349,6 +382,7 @@ class PauliWord(dict):
         new_word, coeff = self._matmul(other)
         return new_word, 2 * coeff
 
+    @_memoize
     def commutator(self, other):
         """
         Compute commutator between a ``PauliWord`` :math:`P` and other operator :math:`O`
