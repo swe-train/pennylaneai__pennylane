@@ -372,6 +372,7 @@ class PauliWord(dict):
         anticom_count = sum(anticom_map[self[wire]][other[wire]] for wire in wires)
         return (anticom_count % 2) == 0
 
+    @lru_cache(maxsize=128)
     def _commutator(self, other):
         """comm between two PauliWords, returns tuple (new_word, coeff) for faster arithmetic"""
         # This may be helpful to developers that need a more lightweight comm between pauli words
@@ -382,7 +383,6 @@ class PauliWord(dict):
         new_word, coeff = self._matmul(other)
         return new_word, 2 * coeff
 
-    @_memoize
     def commutator(self, other):
         """
         Compute commutator between a ``PauliWord`` :math:`P` and other operator :math:`O`
