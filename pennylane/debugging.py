@@ -16,6 +16,7 @@ This module contains functionality for debugging quantum programs on simulator d
 """
 import pennylane as qml
 from pennylane import DeviceError
+import debugpy
 import pdb
 
 
@@ -106,7 +107,7 @@ def snapshots(qnode):
 
 def breakpoint():
     qcontext= qml.QueuingManager.active_context()
-    print(qcontext)
+    
     dev = qml.device('default.qubit')
     @qml.qnode(dev)
     def circuit():
@@ -116,4 +117,5 @@ def breakpoint():
     
     state = circuit()
     
+    # debugpy.breakpoint()
     pdb.set_trace()
