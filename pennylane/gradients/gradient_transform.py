@@ -443,6 +443,9 @@ def _contract_qjac_with_cjac(qjac, cjac, tape):
     return tuple(tuple(tdot(qml.math.stack(q), c) for c in cjac if c is not None) for q in qjac)
 
 
+expand_invalid_trainable_ops = partial(expand_invalid_trainable, ignore_measurements=True)
+
+
 class gradient_transform(qml.batch_transform):  # pragma: no cover
     """Decorator for defining quantum gradient transforms.
 
@@ -531,7 +534,7 @@ class gradient_transform(qml.batch_transform):  # pragma: no cover
         return f"<gradient_transform: {self.__name__}>"  # pylint: disable=no-member
 
     def __init__(
-        self, transform_fn, expand_fn=expand_invalid_trainable, differentiable=True, hybrid=True
+        self, transform_fn, expand_fn=expand_invalid_trainable_ops, differentiable=True, hybrid=True
     ):
         self.hybrid = hybrid
         super().__init__(transform_fn, expand_fn=expand_fn, differentiable=differentiable)

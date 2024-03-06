@@ -43,7 +43,7 @@ def _expand_transform_hadamard(
     device_wires=None,
 ) -> (Sequence[qml.tape.QuantumTape], Callable):
     """Expand function to be applied before hadamard gradient."""
-    expanded_tape = expand_invalid_trainable_hadamard_gradient(tape)
+    expanded_tape = expand_invalid_trainable_hadamard_gradient(tape, ignore_measurements=True)
 
     def null_postprocessing(results):
         """A postprocesing function returned by a transform that only converts the batch of results

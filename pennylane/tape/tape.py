@@ -108,7 +108,7 @@ def rotations_and_diagonal_measurements(tape):
 
 
 # TODO: move this function to its own file and rename
-def expand_tape(tape, depth=1, stop_at=None, expand_measurements=False):
+def expand_tape(tape, depth=1, stop_at=None, expand_measurements=False, ignore_measurements=False):
     """Expand all objects in a tape to a specific depth.
 
     Args:
@@ -175,10 +175,14 @@ def expand_tape(tape, depth=1, stop_at=None, expand_measurements=False):
     # qubit-wise commuting Pauli words. In this case, the tape is expanded with joint
     # rotations and the observables updated to the computational basis. Note that this
     # expansion acts on the original tape in place.
-    if tape.samples_computational_basis and len(tape.measurements) > 1:
+    if ignore_measurements and tape.samples_computational_basis and len(tape.measurements) > 1:
         _validate_computational_basis_sampling(tape.measurements)
 
-    diagonalizing_gates, diagonal_measurements = rotations_and_diagonal_measurements(tape)
+    if ignore_measurements:
+        diagonalizing_gates, diagonal_measurements = rotations_and_diagonal_measurements(tape)
+    else:
+        diagonalizing_gates = []
+        diagonal_measurements = tape.measurements
     for queue, new_queue in [
         (tape.operations + diagonalizing_gates, new_ops),
         (diagonal_measurements, new_measurements),

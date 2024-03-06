@@ -78,8 +78,10 @@ def _expand_metric_tensor(
     # pylint: disable=unused-argument,too-many-arguments
 
     if not allow_nonunitary and approx is None:
-        return [qml.transforms.expand_nonunitary_gen(tape)], lambda x: x[0]
-    return [qml.transforms.expand_multipar(tape)], lambda x: x[0]
+        return [qml.transforms.expand_nonunitary_gen(tape, ignore_measurements=True)], lambda x: x[
+            0
+        ]
+    return [qml.transforms.expand_multipar(tape, ignore_measurements=True)], lambda x: x[0]
 
 
 @partial(

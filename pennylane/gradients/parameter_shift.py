@@ -744,7 +744,9 @@ def _expand_transform_param_shift(
     broadcast=False,
 ) -> (Sequence[qml.tape.QuantumTape], Callable):
     """Expand function to be applied before parameter shift."""
-    expanded_tape = expand_invalid_trainable(tape)
+    expanded_tape = expand_invalid_trainable(
+        tape, expand_measurements=False, ignore_measurements=True
+    )
 
     def null_postprocessing(results):
         """A postprocesing function returned by a transform that only converts the batch of results

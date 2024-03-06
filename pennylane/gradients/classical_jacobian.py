@@ -145,7 +145,7 @@ def classical_jacobian(qnode, argnum=None, expand_fn=None, trainable_only=True):
         tape = qnode.qtape
 
         if expand_fn is not None:
-            tape = expand_fn(tape)
+            tape = expand_fn(tape, ignore_measurements=True)
         return qml.math.stack(tape.get_parameters(trainable_only=trainable_only))
 
     wrapper_argnum = argnum if argnum is not None else None

@@ -66,7 +66,7 @@ def _expand_trainable_multipar(
     expand_fn = qml.transforms.create_expand_trainable_multipar(
         tape, use_tape_argnum=use_tape_argnum
     )
-    return [expand_fn(tape)], lambda x: x[0]
+    return [expand_fn(tape, ignore_measurements=True)], lambda x: x[0]
 
 
 @partial(
