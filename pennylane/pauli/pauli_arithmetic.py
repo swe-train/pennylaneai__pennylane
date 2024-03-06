@@ -806,6 +806,9 @@ class PauliSentence(dict):
 
         return final_ps
 
+    def __hash__(self):
+        return hash(frozenset(self.items()))
+
     def __str__(self):
         """String representation of the PauliSentence."""
         if len(self) == 0:
