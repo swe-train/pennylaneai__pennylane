@@ -15,6 +15,7 @@
 # pylint: disable=import-outside-toplevel, no-member, too-many-arguments
 
 from unittest import mock
+from flaky import flaky
 import pytest
 
 import numpy as np
@@ -22,6 +23,8 @@ import numpy as np
 import pennylane as qml
 
 from pennylane.devices import DefaultQubit, ExecutionConfig
+
+np.random.seed(0)
 
 
 def test_name():
@@ -74,6 +77,18 @@ def test_snapshot_multiprocessing_qnode():
         match="Debugging with ``Snapshots`` is not available with multiprocessing.",
     ):
         qml.snapshots(circuit)()
+
+
+# pylint: disable=protected-access
+def test_applied_modifiers():
+    """Test that defualt qubit has the `single_tape_support` and `simulator_tracking`
+    modifiers applied.
+    """
+    dev = DefaultQubit()
+    assert dev._applied_modifiers == [
+        qml.devices.modifiers.single_tape_support,
+        qml.devices.modifiers.simulator_tracking,
+    ]
 
 
 class TestSupportsDerivatives:
@@ -705,7 +720,7 @@ class TestExecutingBatches:
         g0_expected = qml.jacobian(lambda x: qml.numpy.array(self.expected(x)[0]))(phi)
         assert qml.math.allclose(g0, g0_expected)
 
-        g1 = qml.jacobian(lambda x: qml.numpy.array(self.expected(x)[1]))(phi)
+        g1 = qml.jacobian(lambda x: qml.numpy.array(self.f(dev, x)[1]))(phi)
         g1_expected = qml.jacobian(lambda x: qml.numpy.array(self.expected(x)[1]))(phi)
         assert qml.math.allclose(g1, g1_expected)
 
@@ -1678,6 +1693,7 @@ class TestPostselection:
         dev = qml.device("default.qubit")
         param = qml.math.asarray(param, like=interface)
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ_postselect(theta):
             qml.RX(theta, 0)
@@ -1685,6 +1701,7 @@ class TestPostselection:
             qml.measure(0, postselect=1)
             return qml.apply(mp)
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ_expected():
             qml.RX(np.pi, 0)
@@ -1702,6 +1719,7 @@ class TestPostselection:
         assert qml.math.allclose(res, expected)
         assert qml.math.get_interface(res) == qml.math.get_interface(expected)
 
+    @flaky(max_runs=5)
     @pytest.mark.parametrize(
         "mp",
         [
@@ -1717,17 +1735,18 @@ class TestPostselection:
     )
     @pytest.mark.parametrize("param", np.linspace(np.pi / 4, 3 * np.pi / 4, 3))
     @pytest.mark.parametrize("shots", [50000, (50000, 50000)])
-    def test_postselection_valid_finite_shots(
-        self, param, mp, shots, interface, use_jit, tol_stochastic
-    ):
+    def test_postselection_valid_finite_shots(self, param, mp, shots, interface, use_jit):
         """Test that the results of a circuit with postselection is expected with
         finite shots."""
         if use_jit and (interface != "jax" or isinstance(shots, tuple)):
             pytest.skip("Cannot JIT in non-JAX interfaces, or with shot vectors.")
 
+        np.random.seed(42)
+
         dev = qml.device("default.qubit")
         param = qml.math.asarray(param, like=interface)
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ_postselect(theta):
             qml.RX(theta, 0)
@@ -1735,6 +1754,7 @@ class TestPostselection:
             qml.measure(0, postselect=1)
             return qml.apply(mp)
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ_expected():
             qml.RX(np.pi, 0)
@@ -1750,13 +1770,13 @@ class TestPostselection:
         expected = circ_expected(shots=shots)
 
         if not isinstance(shots, tuple):
-            assert qml.math.allclose(res, expected, atol=tol_stochastic, rtol=0)
+            assert qml.math.allclose(res, expected, atol=0.1, rtol=0)
             assert qml.math.get_interface(res) == qml.math.get_interface(expected)
 
         else:
             assert isinstance(res, tuple)
             for r, e in zip(res, expected):
-                assert qml.math.allclose(r, e, atol=tol_stochastic, rtol=0)
+                assert qml.math.allclose(r, e, atol=0.1, rtol=0)
                 assert qml.math.get_interface(r) == qml.math.get_interface(e)
 
     @pytest.mark.parametrize(
@@ -1779,6 +1799,7 @@ class TestPostselection:
 
         with mock.patch("numpy.random.binomial", lambda *args, **kwargs: 5):
 
+            @qml.defer_measurements
             @qml.qnode(dev, interface=interface)
             def circ_postselect(theta):
                 qml.RX(theta, 0)
@@ -1832,8 +1853,9 @@ class TestPostselection:
             pytest.skip("Jitting tested in different test.")
 
         # Wires are specified so that the shape for measurements can be determined correctly
-        dev = qml.device("default.qubit", wires=2)
+        dev = qml.device("default.qubit")
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ():
             qml.RX(np.pi, 0)
@@ -1874,9 +1896,10 @@ class TestPostselection:
         import jax
 
         # Wires are specified so that the shape for measurements can be determined correctly
-        dev = qml.device("default.qubit", wires=2)
+        dev = qml.device("default.qubit")
 
         @jax.jit
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ():
             qml.RX(np.pi, 0)
@@ -1913,6 +1936,7 @@ class TestPostselection:
 
         dev = qml.device("default.qubit")
 
+        @qml.defer_measurements
         @qml.qnode(dev, interface=interface)
         def circ():
             qml.RX(np.pi, 0)

@@ -62,6 +62,26 @@ def _get_device_shots(device) -> Shots:
     return device.shots
 
 
+def _make_execution_config(circuit: "QNode") -> "qml.devices.ExecutionConfig":
+    if circuit.gradient_fn is None:
+        _gradient_method = None
+    elif isinstance(circuit.gradient_fn, str):
+        _gradient_method = circuit.gradient_fn
+    else:
+        _gradient_method = "gradient-transform"
+    grad_on_execution = circuit.execute_kwargs.get("grad_on_execution")
+    if circuit.interface == "jax":
+        grad_on_execution = False
+    elif grad_on_execution == "best":
+        grad_on_execution = None
+    return qml.devices.ExecutionConfig(
+        interface=circuit.interface,
+        gradient_method=_gradient_method,
+        grad_on_execution=grad_on_execution,
+        use_device_jacobian_product=circuit.execute_kwargs["device_vjp"],
+    )
+
+
 class QNode:
     """Represents a quantum node in the hybrid computational graph.
 
@@ -163,8 +183,9 @@ class QNode:
             Only applies if the device is queried for the gradient; gradient transform
             functions available in ``qml.gradients`` are only supported on the backward
             pass. The 'best' option chooses automatically between the two options and is default.
-        cache (bool or dict or Cache): Whether to cache evaluations. This can result in
-            a significant reduction in quantum evaluations during gradient computations.
+        cache="auto" (str or bool or dict or Cache): Whether to cache evalulations.
+            ``"auto"`` indicates to cache only when ``max_diff > 1``. This can result in
+            a reduction in quantum evaluations during higher order gradient computations.
             If ``True``, a cache with corresponding ``cachesize`` is created for each batch
             execution. If ``False``, no caching is used. You may also pass your own cache
             to be used; this can be any object that implements the special methods
@@ -190,13 +211,13 @@ class QNode:
     >>> @qml.qnode(dev)
     ... def circuit(x):
     ...     qml.RX(x, wires=0)
-    ...     return qml.expval(qml.PauliZ(0))
+    ...     return qml.expval(qml.Z(0))
 
     or by instantiating the class directly:
 
     >>> def circuit(x):
     ...     qml.RX(x, wires=0)
-    ...     return qml.expval(qml.PauliZ(0))
+    ...     return qml.expval(qml.Z(0))
     >>> dev = qml.device("default.qubit", wires=1)
     >>> qnode = qml.QNode(circuit, dev)
 
@@ -220,7 +241,7 @@ class QNode:
         >>> @qml.qnode(dev)
         ... def circuit(x):
         ...     qml.RX(x, wires=0)
-        ...     return qml.expval(qml.PauliZ(0))
+        ...     return qml.expval(qml.Z(0))
 
         If we want to execute it at multiple values ``x``,
         we may pass those as a one-dimensional array to the QNode:
@@ -320,7 +341,7 @@ class QNode:
                 qml.RY(y, wires=1)
                 qml.RX(x, wires=2)
                 qml.RY(y, wires=3)
-                return qml.expval(qml.PauliZ(0) @ qml.PauliX(1) @ qml.PauliZ(2) @ qml.PauliZ(3))
+                return qml.expval(qml.Z(0) @ qml.X(1) @ qml.Z(2) @ qml.Z(3))
 
 
             x = np.array([0.4, 2.1, -1.3])
@@ -367,7 +388,7 @@ class QNode:
                 qml.RX(x[0], wires=0)
                 qml.RY(x[1], wires=1)
                 qml.RZ(x[2], wires=1)
-                return qml.expval(qml.PauliZ(0) @ qml.PauliX(1))
+                return qml.expval(qml.Z(0) @ qml.X(1))
 
             x = np.array([[1, 2], [3, 4], [5, 6]])
 
@@ -395,7 +416,7 @@ class QNode:
         expansion_strategy="gradient",
         max_expansion=10,
         grad_on_execution="best",
-        cache=True,
+        cache="auto",
         cachesize=10000,
         max_diff=1,
         device_vjp=False,
@@ -404,9 +425,11 @@ class QNode:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 """Creating QNode(func=%s, device=%s, interface=%s, diff_method=%s, expansion_strategy=%s, max_expansion=%s, grad_on_execution=%s, cache=%s, cachesize=%s, max_diff=%s, gradient_kwargs=%s""",
-                func
-                if not (logger.isEnabledFor(qml.logging.TRACE) and inspect.isfunction(func))
-                else "\n" + inspect.getsource(func),
+                (
+                    func
+                    if not (logger.isEnabledFor(qml.logging.TRACE) and inspect.isfunction(func))
+                    else "\n" + inspect.getsource(func)
+                ),
                 repr(device),
                 interface,
                 diff_method,
@@ -461,6 +484,7 @@ class QNode:
         self.diff_method = diff_method
         self.expansion_strategy = expansion_strategy
         self.max_expansion = max_expansion
+        cache = (max_diff > 1) if cache == "auto" else cache
 
         # execution keyword arguments
         self.execute_kwargs = {
@@ -923,7 +947,7 @@ class QNode:
             and not isinstance(self.device, qml.devices.Device)
             and not self.device.capabilities().get("supports_mid_measure", False)
         )
-        if expand_mid_measure:
+        if expand_mid_measure or self.expansion_strategy == "device":
             # Assume that tapes are not split if old device is used since postselection is not supported.
             tapes, _ = qml.defer_measurements(self._tape, device=self.device)
             self._tape = tapes[0]
@@ -988,24 +1012,7 @@ class QNode:
         config = None
         # Add the device program to the QNode program
         if isinstance(self.device, qml.devices.Device):
-            if self.gradient_fn is None:
-                _gradient_method = None
-            elif isinstance(self.gradient_fn, str):
-                _gradient_method = self.gradient_fn
-            else:
-                _gradient_method = "gradient-transform"
-            grad_on_execution = self.execute_kwargs.get("grad_on_execution")
-            if self.interface == "jax":
-                grad_on_execution = False
-            elif grad_on_execution == "best":
-                grad_on_execution = None
-
-            config = qml.devices.ExecutionConfig(
-                interface=self.interface,
-                gradient_method=_gradient_method,
-                grad_on_execution=grad_on_execution,
-                use_device_jacobian_product=self.execute_kwargs["device_vjp"],
-            )
+            config = _make_execution_config(self)
             device_transform_program, config = self.device.preprocess(execution_config=config)
             full_transform_program = self.transform_program + device_transform_program
         else:
@@ -1036,7 +1043,7 @@ class QNode:
                 full_transform_program._set_all_argnums(
                     self, args, kwargs, argnums
                 )  # pylint: disable=protected-access
-
+        full_transform_program.prune_dynamic_transform()
         # pylint: disable=unexpected-keyword-arg
         res = qml.execute(
             (self._tape,),
