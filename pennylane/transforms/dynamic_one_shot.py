@@ -30,6 +30,7 @@ from pennylane.measurements import (
     SampleMP,
     VarianceMP,
 )
+from pennylane.measurements.mid_measure import MeasurementValue
 
 from .core import transform
 
@@ -81,11 +82,13 @@ def dynamic_one_shot(tape: qml.tape.QuantumTape) -> (Sequence[qml.tape.QuantumTa
     in the opposite limit.
     """
 
-    if not any(isinstance(o, MidMeasureMP) for o in tape.operations):
+    if not any(isinstance(o, MidMeasureMP) for o in tape.operations) or tape.shots.total_shots == 1:
         return (tape,), null_postprocessing
 
-    aux_tape = init_auxiliary_tape(tape)
+    aux_tape, mcms = init_auxiliary_tape(tape)
     output_tapes = [aux_tape] * tape.shots.total_shots
+
+    num_measurements = len(tape.measurements) - len(mcms)
 
     def processing_fn(results, has_partitioned_shots=None):
         if has_partitioned_shots is None and tape.shots.has_partitioned_shots:
@@ -97,11 +100,15 @@ def dynamic_one_shot(tape: qml.tape.QuantumTape) -> (Sequence[qml.tape.QuantumTa
             return tuple(final_results)
         all_shot_meas, list_mcm_values_dict, valid_shots = None, [], 0
         for res in results:
-            one_shot_meas, mcm_values_dict = res
+
+            one_shot_meas = res[:num_measurements]
+            mcm_values = res[num_measurements:]
+            mcm_values_dict = dict(zip(mcms, mcm_values))
+
             if one_shot_meas is None:
                 continue
             valid_shots += 1
-            all_shot_meas = accumulate_native_mcm(aux_tape, all_shot_meas, one_shot_meas)
+            all_shot_meas = accumulate_native_mcm(tape, all_shot_meas, one_shot_meas)
             list_mcm_values_dict.append(mcm_values_dict)
         if not valid_shots:
             warnings.warn(
@@ -132,9 +139,20 @@ def init_auxiliary_tape(circuit: qml.tape.QuantumScript):
                 new_measurements.append(SampleMP(obs=m.obs))
             else:
                 new_measurements.append(m)
-    return qml.tape.QuantumScript(
+
+    def null_mcm_processing(obj):
+        return obj
+
+    mcms = []
+    for op in circuit.operations:
+        if isinstance(op, MidMeasureMP):
+            mcms.append(op)
+            new_measurements.append(qml.sample(MeasurementValue([op], null_mcm_processing)))
+
+    tape = qml.tape.QuantumScript(
         circuit.operations, new_measurements, shots=1, trainable_params=circuit.trainable_params
     )
+    return tape, mcms
 
 
 def accumulate_native_mcm(circuit: qml.tape.QuantumScript, all_shot_meas, one_shot_meas):

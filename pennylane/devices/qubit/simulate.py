@@ -285,7 +285,16 @@ def simulate_one_shot_native_mcm(
     )
     if not np.allclose(np.linalg.norm(state), 1.0):
         return None, mcm_dict
-    return (
-        measure_final_state(circuit, state, is_state_batched, rng=rng, prng_key=prng_key),
-        mcm_dict,
-    )
+    normal_measurements = []
+    mcm_measurements = []
+    for m in circuit.measurements:
+        if m.mv is None:
+            normal_measurements.append(m)
+        else:
+            mcm_measurements.append(m.mv.measurements[0])
+
+    circuit2 = qml.tape.QuantumScript(circuit.operations, normal_measurements, shots=circuit.shots)
+    normal_res = measure_final_state(circuit2, state, is_state_batched, rng=rng, prng_key=prng_key)
+    normal_res = normal_res if isinstance(normal_res, tuple) else (normal_res,)
+    mcm_res = tuple(mcm_dict[mcm_m] for mcm_m in mcm_measurements)
+    return normal_res + mcm_res
