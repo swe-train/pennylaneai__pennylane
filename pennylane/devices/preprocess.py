@@ -500,7 +500,6 @@ def diagonalize_measurements(tape):
 
     diagonal_batch = []
     for t in batch:
-        print(t.circuit)
         if t.samples_computational_basis and len(t.measurements) > 1:
             _validate_computational_basis_sampling(t.measurements)
         diagonalizing_gates, diagonal_measurements = rotations_and_diagonal_measurements(t)
