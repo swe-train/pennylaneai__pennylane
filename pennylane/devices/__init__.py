@@ -73,6 +73,7 @@ method for devices.
     validate_multiprocessing_workers
     validate_adjoint_trainable_params
     no_sampling
+    diagonalize_measurements
 
 Other transforms that may be relevant to device preprocessing include:
 

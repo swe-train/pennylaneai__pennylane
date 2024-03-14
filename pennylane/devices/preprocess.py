@@ -472,7 +472,6 @@ def validate_measurements(
 @transform
 def split_up_non_commuting(tape):
     """Split up the tape so that all measurements on each tape commute."""
-
     if len(tape.measurements) == 1:
         m0 = tape.measurements[0]
         if (
