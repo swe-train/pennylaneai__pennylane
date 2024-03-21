@@ -179,7 +179,9 @@ def expand_vector(vector, original_wires, expanded_wires):
     qudit_order = int(2 ** (np.log2(len_vector) / N))
 
     if not set(expanded_wires).issuperset(original_wires):
-        raise ValueError("Invalid target subsystems provided in 'original_wires' argument.")
+        raise ValueError(
+            f"Invalid target subsystems provided in 'original_wires' argument. Original wires: {original_wires}, expanded wires: {expanded_wires}"
+        )
 
     if qml.math.shape(vector) != (qudit_order**N,):
         raise ValueError(f"Vector parameter must be of length {qudit_order}**len(original_wires)")
