@@ -10,23 +10,29 @@ env:
   PYTHON_VERSION: 3.9
 
 jobs:
-  stable-torch-deps:
+  generate-stable-deps:
     runs-on: ubuntu-latest
     steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Checkout
+      uses: actions/checkout@v3
       with:
+        repository: PennyLaneAI/pennylane
+
+    - name: Create Torch deps
+      uses: ./.github/workflows/install_deps
+      with:
+        venv_name: .torch_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: true
         install_tensorflow: false
         install_jax: false
         install_pennylane_lightning_master: false
         requirements_file: torch.txt
-    
-  stable-tf-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+
+    - name: Create TF deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .tf_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: false
         install_tensorflow: true
@@ -34,11 +40,10 @@ jobs:
         install_pennylane_lightning_master: false
         requirements_file: tf.txt
 
-  stable-jax-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Create Jax deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .jax_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: false
         install_tensorflow: false
@@ -46,11 +51,10 @@ jobs:
         install_pennylane_lightning_master: false
         requirements_file: jax.txt
 
-  stable-core-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Create core deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .core_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: false
         install_tensorflow: false
@@ -58,11 +62,10 @@ jobs:
         install_pennylane_lightning_master: false
         requirements_file: core.txt
 
-  stable-all-interfaces-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Create all-interfaces deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .all_interfaces_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: true
         install_tensorflow: true
@@ -70,11 +73,10 @@ jobs:
         install_pennylane_lightning_master: false
         requirements_file: all_interfaces.txt
 
-  stable-external-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Create external-lib deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .external_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: false
         install_tensorflow: true
@@ -83,11 +85,10 @@ jobs:
         additional_pip_packages: pyzx pennylane-catalyst matplotlib stim
         requirements_file: external.txt
 
-  stable-doc-deps:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/workflows/install_deps
+    - name: Create docs deps
+      uses: ./.github/workflows/install_deps
       with:
+        venv_name: .docs_venv
         python_version: ${{ env.PYTHON_VERSION }}
         install_pytorch: false
         install_tensorflow: true

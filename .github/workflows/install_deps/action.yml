@@ -44,6 +44,10 @@ inputs:
     description: File name to store stable version of requirements for a test group
     required: false
     default: ''
+  venv_name:
+    description: The name of the venv to create and run in. Does not create one if omitted
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -52,6 +56,13 @@ runs:
       uses: actions/setup-python@v4
       with:
         python-version: '${{ inputs.python_version }}'
+
+    - name: Activate venv
+      shell: bash
+      if: inputs.venv_name != ''
+      run: |
+        python -m venv ${{ inputs.venv_name }}
+        source ${{ inputs.venv_name }}/bin/activate
 
     - name: Upgrade PIP
       shell: bash
