@@ -98,14 +98,7 @@ jobs:
         requirements_file: doc.txt
 
   upload-stable-deps:
-    needs:
-      - stable-torch-deps
-      - stable-tf-deps
-      - stable-jax-deps
-      - stable-core-deps
-      - stable-all-interfaces-deps
-      - stable-external-deps
-      - stable-doc-deps
+    needs: generate-stable-deps
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
