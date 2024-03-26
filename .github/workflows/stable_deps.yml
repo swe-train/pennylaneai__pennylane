@@ -1,0 +1,165 @@
+name: Update Stable Deps
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+  - cron: '47 2 * * 1'
+
+env:
+  DEPS_BRANCH: bot/stable-deps-update
+  PYTHON_VERSION: 3.9
+
+jobs:
+  stable-torch-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: true
+        install_tensorflow: false
+        install_jax: false
+        install_pennylane_lightning_master: false
+        requirements_file: torch.txt
+    
+  stable-tf-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: false
+        install_tensorflow: true
+        install_jax: false
+        install_pennylane_lightning_master: false
+        requirements_file: tf.txt
+
+  stable-jax-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: false
+        install_tensorflow: false
+        install_jax: true
+        install_pennylane_lightning_master: false
+        requirements_file: jax.txt
+
+  stable-core-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: false
+        install_tensorflow: false
+        install_jax: false
+        install_pennylane_lightning_master: false
+        requirements_file: core.txt
+
+  stable-all-interfaces-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: true
+        install_tensorflow: true
+        install_jax: true
+        install_pennylane_lightning_master: false
+        requirements_file: all_interfaces.txt
+
+  stable-external-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: false
+        install_tensorflow: true
+        install_jax: true
+        install_pennylane_lightning_master: false
+        additional_pip_packages: pyzx pennylane-catalyst matplotlib stim
+        requirements_file: external.txt
+
+  stable-doc-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: ./.github/workflows/install_deps
+      with:
+        python_version: ${{ env.PYTHON_VERSION }}
+        install_pytorch: false
+        install_tensorflow: true
+        install_jax: true
+        install_pennylane_lightning_master: false
+        additional_pip_packages: openfermionpyscf aiohttp fsspec h5py && pip install -r doc/requirements.txt
+        requirements_file: doc.txt
+
+  upload-stable-deps:
+    needs:
+      - stable-torch-deps
+      - stable-tf-deps
+      - stable-jax-deps
+      - stable-core-deps
+      - stable-all-interfaces-deps
+      - stable-external-deps
+      - stable-doc-deps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Prepare local repo
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<>"
+          if git ls-remote --exit-code origin "refs/heads/${{ env.DEPS_BRANCH }}"; then
+            git checkout "${{ env.DEPS_BRANCH }}"
+          else
+            git checkout -b "${{ env.DEPS_BRANCH }}"
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: frozen-*
+          path: .github/stable/
+          merge-multiple: true
+
+      - name: Determine if changes have been made
+        id: changed
+        run: |
+          echo "has_changes=$(git status --porcelain | wc -l | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Stage changes
+        if: steps.changed.outputs.has_changes != '0'
+        run: |
+          git add .github/stable/
+          git commit -m "Update changed dependencies"
+          git push -f --set-upstream origin "${{ env.DEPS_BRANCH }}"
+
+      # Create PR to master
+      - name: Create pull request
+        if: steps.changed.outputs.has_changes != '0'
+        uses: repo-sync/pull-request@v2
+        with:
+          source_branch: "${{ env.DEPS_BRANCH }}"
+          destination_branch: "master"
+          github_token: "${{ secrets.GITHUB_TOKEN }}"
+          pr_title: "Update stable dependency files"
+          pr_body: |
+            Automatic update of stable requirement files to snapshot valid python environments.
+
+            Because bots are not able to trigger CI on their own, please do so by pushing an empty commit to this branch using the following command:
+
+            ```
+            git commit --allow-empty -m 'trigger ci'
+            ```
+
+            Alternatively, wait for this branch to be out-of-date with master, then just use the "Update branch" button!
+          pr_allow_empty: false
+          pr_draft: false
