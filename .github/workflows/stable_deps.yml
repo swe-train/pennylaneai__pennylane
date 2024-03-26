@@ -103,6 +103,7 @@ jobs:
       uses: ./.github/workflows/install_deps
       with:
         python_version: ${{ env.PYTHON_VERSION }}
+        skip_dev_deps: true
         install_pytorch: false
         install_tensorflow: true
         install_jax: true
