@@ -62,7 +62,7 @@ runs:
       if: inputs.venv_name != ''
       run: |
         python -m venv ${{ inputs.venv_name }}
-        source ${{ inputs.venv_name }}/bin/activate
+        echo "${{ github.workspace }}/${{ inputs.venv_name }}/bin" >> $GITHUB_PATH
 
     - name: Upgrade PIP
       shell: bash
