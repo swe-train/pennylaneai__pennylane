@@ -1,6 +1,5 @@
 name: Update Stable Deps
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
   - cron: '47 2 * * 1'
