@@ -253,7 +253,13 @@ def _preprocess_expand_fn(
 
 
 def _make_inner_execute(
-    device, override_shots, cache, expand_fn=None, execution_config=None, numpy_only=True
+    device,
+    override_shots,
+    cache,
+    inner_program,
+    expand_fn=None,
+    execution_config=None,
+    numpy_only=True,
 ) -> Callable:
     """Construct the function that will execute the tapes inside the ml framework registration
     for the 1st order derivatives.
@@ -271,6 +277,8 @@ def _make_inner_execute(
     else:
         device_execution = partial(device.execute, execution_config=execution_config)
 
+    inner_program = qml.transforms.core.TransformProgram(inner_program)
+
     def inner_execute(tapes: Sequence[QuantumTape], **_) -> ResultBatch:
         """Execution that occurs within a machine learning framework boundary.
 
@@ -280,10 +288,8 @@ def _make_inner_execute(
             device_execution (Callable[[Sequence[QuantumTape]], ResultBatch])
             cache (None | MutableMapping): The cache to use. If ``None``, caching will not occur.
         """
-        transform_program = qml.transforms.core.TransformProgram()
-
         if cache is not None:
-            transform_program.add_transform(_cache_transform, cache=cache)
+            inner_program.add_transform(_cache_transform, cache=cache)
 
         # TODO: Apply expand_fn() and convert_to_numpy_parameters() as transforms.
         if expand_fn:
@@ -291,7 +297,7 @@ def _make_inner_execute(
         if numpy_only:
             tapes = tuple(qml.transforms.convert_to_numpy_parameters(t) for t in tapes)
 
-        transformed_tapes, transform_post_processing = transform_program(tapes)
+        transformed_tapes, transform_post_processing = inner_program(tapes)
 
         if transformed_tapes:
             results = device_execution(transformed_tapes)
@@ -365,6 +371,7 @@ def execute(
     gradient_fn: Optional[Union[Callable, str]] = None,
     interface="auto",
     transform_program=None,
+    inner_program=None,
     config=None,
     grad_on_execution="best",
     gradient_kwargs=None,
@@ -546,11 +553,17 @@ def execute(
         gradient_fn, grad_on_execution, interface, device, device_vjp
     )
 
+    is_gradient_transform = isinstance(gradient_fn, qml.transforms.core.TransformDispatcher)
+
     if transform_program is None:
-        if isinstance(device, qml.devices.Device):
-            transform_program = device.preprocess(config)[0]
-        else:
-            transform_program = qml.transforms.core.TransformProgram()
+        transform_program = qml.transforms.core.TransformProgram()
+        if isinstance(device, qml.devices.Device) and not is_gradient_transform:
+            transform_program += device.preprocess(config)[0]
+
+    if inner_program is None:
+        inner_program = qml.transforsm.core.TransformProgram()
+        if isinstance(device, qml.devices.Device) and is_gradient_transform:
+            inner_program += device.preprocess(config)[0]
 
     # If caching is desired but an explicit cache is not provided, use an ``LRUCache``.
     if cache is True:
@@ -576,8 +589,9 @@ def execute(
         device,
         override_shots,
         cache,
-        expand_fn,
-        config,
+        inner_program=inner_program,
+        expand_fn=expand_fn,
+        execution_config=config,
         numpy_only=not device_supports_interface_data,
     )
 
@@ -720,7 +734,9 @@ def execute(
 
         else:
             # need to override to have no cache
-            inner_execute = _make_inner_execute(device, override_shots, cache=None)
+            inner_execute = _make_inner_execute(
+                device, override_shots, inner_program=inner_program, cache=None
+            )
 
             def inner_execute_with_empty_jac(tapes, **_):
                 return (inner_execute(tapes), [])
