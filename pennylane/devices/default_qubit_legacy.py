@@ -243,8 +243,7 @@ class DefaultQubitLegacy(QubitDevice):
 
         return qml.BooleanFn(accepts_obj)
 
-    @functools.lru_cache()
-    def map_wires(self, wires):
+    def _map_wires(self, wires):
         # temporarily overwrite this method to bypass
         # wire map that produces Wires objects
         try:
