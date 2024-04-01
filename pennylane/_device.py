@@ -155,6 +155,8 @@ class Device(abc.ABC):
         self.tracker = qml.Tracker()
         self.custom_expand_fn = None
 
+        self.map_wires = lru_cache(self._map_wires)
+
     def __repr__(self):
         """String representation."""
         return f"<{self.__class__.__name__} device (wires={self.num_wires}, shots={self.shots}) at {hex(id(self))}>"
@@ -370,8 +372,7 @@ class Device(abc.ABC):
 
         return Wires(ordered_subset_lst)
 
-    @lru_cache()
-    def map_wires(self, wires):
+    def _map_wires(self, wires):
         """Map the wire labels of wires using this device's wire map.
 
         Args:
