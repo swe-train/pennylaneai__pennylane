@@ -118,7 +118,7 @@ from pennylane.ops.functions import (
 )
 from pennylane.ops.identity import I
 from pennylane.optimize import *
-from pennylane.vqe import ExpvalCost
+# from pennylane.vqe import ExpvalCost
 from pennylane.debugging import snapshots, breakpoint
 from pennylane.shadows import ClassicalShadow
 from pennylane.qcut import cut_circuit, cut_circuit_mc
