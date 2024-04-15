@@ -985,7 +985,8 @@ def molecular_hamiltonian(
             h = qml.map_wires(h, wires_map)
         return h, 2 * len(active)
 
-    if method == "pyscf" and mapping.strip().lower() == "jordan_wigner":
+    # if method == "pyscf" and mapping.strip().lower() == "jordan_wigner":
+    if method == "pyscf":
         core_constant, one_mo, two_mo = _pyscf_integrals(
             symbols, geometry_hf, charge, mult, basis, active_electrons, active_orbitals
         )
@@ -1001,19 +1002,20 @@ def molecular_hamiltonian(
 
         return h_pl, len(h_pl.wires)
 
-    openfermion, _ = _import_of()
-
-    hf_file = meanfield(symbols, geometry_hf, name, charge, mult, basis, "pyscf", outpath)
-
-    molecule = openfermion.MolecularData(filename=hf_file)
-
-    core, active = qml.qchem.active_space(
-        molecule.n_electrons, molecule.n_orbitals, mult, active_electrons, active_orbitals
+    h_pl = _openfermion_hamiltonian(
+        symbols,
+        coordinates,
+        name,
+        charge,
+        mult,
+        basis,
+        active_electrons,
+        active_orbitals,
+        mapping,
+        outpath,
+        wires,
+        convert_tol,
     )
-
-    h_of, qubits = (decompose(hf_file, mapping, core, active), 2 * len(active))
-
-    h_pl = qml.qchem.convert.import_operator(h_of, wires=wires, tol=convert_tol)
 
     return h_pl, len(h_pl.wires)
 
@@ -1085,3 +1087,35 @@ def _pyscf_integrals(
         two_mo = two_mo[qml.math.ix_(active, active, active, active)]
 
     return core_constant, one_mo, two_mo
+
+
+def _openfermion_hamiltonian(
+    symbols,
+    coordinates,
+    name,
+    charge=0,
+    mult=1,
+    basis="sto-3g",
+    active_electrons=None,
+    active_orbitals=None,
+    mapping="jordan_wigner",
+    outpath=".",
+    wires=None,
+    convert_tol=1e012,
+):
+
+    openfermion, _ = _import_of()
+
+    hf_file = meanfield(symbols, coordinates, name, charge, mult, basis, "pyscf", outpath)
+
+    molecule = openfermion.MolecularData(filename=hf_file)
+
+    core, active = qml.qchem.active_space(
+        molecule.n_electrons, molecule.n_orbitals, mult, active_electrons, active_orbitals
+    )
+
+    h_of, qubits = (decompose(hf_file, mapping, core, active), 2 * len(active))
+
+    h_pl = qml.qchem.convert.import_operator(h_of, wires=wires, tol=convert_tol)
+
+    return h_pl
