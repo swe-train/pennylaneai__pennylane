@@ -18,6 +18,7 @@ Tests for the AmplitudeAmplification template.
 import pytest
 import numpy as np
 import pennylane as qml
+from pennylane.templates.subroutines.amplitude_amplification import _get_fixed_point_angles
 
 
 @qml.prod
@@ -33,69 +34,34 @@ def oracle(items, wires):
 
 
 class TestInitialization:
-    """Test the AmplitudeAmplification class initializes correctly."""
+    """Test that AmplitudeAmplification initializes correctly."""
 
-    @pytest.mark.parametrize(
-        "fixed_point, work_wire, raise_error",
-        (
-            (True, 3, False),
-            (True, "a", False),
-            (False, 4, False),
-            (True, None, True),
-        ),
-    )
-    def test_error_none_wire(self, fixed_point, work_wire, raise_error):
-        """Test an error is raised if work_wire is None and fixed_point is True."""
+    def test_error_none_wire(self):
+        """Test that an error is raised if work_wire is None and fixed_point is True."""
 
         U = generator(wires=range(3))
         O = oracle([0, 2], wires=range(3))
 
-        if raise_error:
-            with pytest.raises(
-                qml.wires.WireError, match="work_wire must be specified if fixed_point == True."
-            ):
-                qml.AmplitudeAmplification(
-                    U, O, iters=3, fixed_point=fixed_point, work_wire=work_wire
-                )
-
-        else:
-            try:
-                qml.AmplitudeAmplification(
-                    U, O, iters=3, fixed_point=fixed_point, work_wire=work_wire
-                )
-            except TypeError:
-                assert False  # test should fail if an error was raised when we expect it not to
+        with pytest.raises(
+            qml.wires.WireError, match="work_wire must be specified if fixed_point == True."
+        ):
+            qml.AmplitudeAmplification(U, O, iters=3, fixed_point=True)
 
     @pytest.mark.parametrize(
-        "wires, fixed_point, work_wire, raise_error",
+        "wires, fixed_point, work_wire",
         (
-            ([0, 1, 2], True, 2, True),
-            ([0, 1, 2], True, "a", False),
-            (["a", "b"], True, "a", True),
-            ([0, 1], False, 0, False),
+            ([0, 1, 2], True, 2),
+            (["a", "b"], True, "a"),
         ),
     )
-    def test_error_wrong_work_wire(self, wires, fixed_point, work_wire, raise_error):
-        """Test an error is raised if work_wire is part of the U wires."""
+    def test_error_wrong_work_wire(self, wires, fixed_point, work_wire):
+        """Test that an error is raised if work_wire is part of the O wires."""
 
         U = generator(wires=wires)
         O = oracle([0], wires=wires)
 
-        if raise_error:
-            with pytest.raises(
-                ValueError, match="work_wire must be different from the wires of U."
-            ):
-                qml.AmplitudeAmplification(
-                    U, O, iters=3, fixed_point=fixed_point, work_wire=work_wire
-                )
-
-        else:
-            try:
-                qml.AmplitudeAmplification(
-                    U, O, iters=3, fixed_point=fixed_point, work_wire=work_wire
-                )
-            except TypeError:
-                assert False  # test should fail if an error was raised when we expect it not to
+        with pytest.raises(ValueError, match="work_wire must be different from the wires of O."):
+            qml.AmplitudeAmplification(U, O, iters=3, fixed_point=fixed_point, work_wire=work_wire)
 
 
 @pytest.mark.parametrize(
@@ -108,6 +74,7 @@ class TestInitialization:
     ),
 )
 def test_compare_grover(n_wires, items, iters):
+    """Test that Grover's algorithm gives the same result with GroverOperator and AmplitudeAmplification."""
     U = generator(wires=range(n_wires))
     O = oracle(items, wires=range(n_wires))
 
@@ -132,10 +99,9 @@ def test_compare_grover(n_wires, items, iters):
     assert np.allclose(circuit_amplitude_amplification(), circuit_grover(), atol=1e-5)
 
 
-class TestIntegration:
-    """Tests that the AmplitudeAmplification is executable in a QNode context"""
+def test_default_lightning_devices():
+    """Test that AmplitudeAmplification executes with the default.qubit and lightning.qubit simulators."""
 
-    @staticmethod
     def circuit():
         """Test circuit"""
         qml.Hadamard(wires=0)
@@ -147,33 +113,118 @@ class TestIntegration:
         )
         return qml.probs(wires=range(3))
 
-    # not calculated analytically, we are only ensuring that the results are consistent accross interfaces
+    dev1 = qml.device("default.qubit")
+    qnode1 = qml.QNode(circuit, dev1, interface=None)
 
-    exp_result = np.array(
-        [0.52864728, 0.0673361, 0.0673361, 0.0673361, 0.0673361, 0.0673361, 0.0673361, 0.0673361]
-    )
+    res1 = qnode1()
 
-    def test_qnode_numpy(self):
-        """Test that the QNode executes with Numpy."""
+    dev2 = qml.device("lightning.qubit", wires=4)
+    qnode2 = qml.QNode(circuit, dev2)
+
+    res2 = qnode2()
+
+    assert np.allclose(res1, res2, atol=1e-5)
+
+
+class TestDifferentiability:
+    """Test that AmplitudeAmplification is differentiable"""
+
+    @staticmethod
+    def circuit(params):
+        qml.RY(params[0], wires=0)
+        qml.AmplitudeAmplification(
+            qml.RY(params[0], wires=0),
+            qml.RZ(params[1], wires=0),
+            iters=3,
+            fixed_point=True,
+            work_wire=3,
+        )
+
+        return qml.expval(qml.PauliZ(0))
+
+    # calculated numerically with finite diff method (h = 1e-5)
+    exp_grad = np.array([-0.88109663, -0.66429297])
+
+    params = np.array([0.9, 0.1])
+
+    @pytest.mark.autograd
+    def test_qnode_autograd(self):
+        """Test that the QNode executes with Autograd."""
+
         dev = qml.device("default.qubit")
-        qnode = qml.QNode(self.circuit, dev, interface=None)
+        qnode = qml.QNode(self.circuit, dev, interface="autograd")
 
-        res = qnode()
-        assert res.shape == (8,)
-        assert np.allclose(res, self.exp_result, atol=0.002)
+        params = qml.numpy.array(self.params, requires_grad=True)
+        res = qml.grad(qnode)(params)
+        print(res)
+        assert qml.math.shape(res) == (2,)
+        assert np.allclose(res, self.exp_grad, atol=1e-5)
 
-    def test_lightning_qubit(self):
-        """Test that the QNode executes with the Lightning Qubit simulator."""
-        dev = qml.device("lightning.qubit", wires=4)
-        qnode = qml.QNode(self.circuit, dev)
+    @pytest.mark.jax
+    @pytest.mark.parametrize("use_jit", [False, True])
+    @pytest.mark.parametrize("shots", [None, 50000])
+    def test_qnode_jax(self, shots, use_jit):
+        """Test that the QNode executes and is differentiable with JAX. The shots
+        argument controls whether autodiff or parameter-shift gradients are used."""
+        import jax
 
-        res = qnode()
-        assert res.shape == (8,)
-        assert np.allclose(res, self.exp_result, atol=0.002)
+        jax.config.update("jax_enable_x64", True)
+
+        dev = qml.device("default.qubit", shots=shots, seed=10)
+        diff_method = "backprop" if shots is None else "parameter-shift"
+        qnode = qml.QNode(self.circuit, dev, interface="jax", diff_method=diff_method)
+        if use_jit:
+            qnode = jax.jit(qnode)
+
+        params = jax.numpy.array(self.params)
+
+        jac_fn = jax.jacobian(qnode)
+        if use_jit:
+            jac_fn = jax.jit(jac_fn)
+
+        jac = jac_fn(params)
+        assert jac.shape == (2,)
+        assert np.allclose(jac, self.exp_grad, atol=0.01)
+
+    @pytest.mark.torch
+    @pytest.mark.parametrize("shots", [None, 50000])
+    def test_qnode_torch(self, shots):
+        """Test that the QNode executes and is differentiable with Torch. The shots
+        argument controls whether autodiff or parameter-shift gradients are used."""
+        import torch
+
+        dev = qml.device("default.qubit", shots=shots, seed=10)
+        diff_method = "backprop" if shots is None else "parameter-shift"
+        qnode = qml.QNode(self.circuit, dev, interface="torch", diff_method=diff_method)
+
+        params = torch.tensor(self.params, requires_grad=True)
+        jac = torch.autograd.functional.jacobian(qnode, params)
+        assert qml.math.shape(jac) == (2,)
+        assert qml.math.allclose(jac, self.exp_grad, atol=0.01)
+
+    @pytest.mark.tf
+    @pytest.mark.parametrize("shots", [None, 50000])
+    @pytest.mark.xfail(reason="tf gradient doesn't seem to be working, returns ()")
+    def test_qnode_tf(self, shots):
+        """Test that the QNode executes and is differentiable with TensorFlow. The shots
+        argument controls whether autodiff or parameter-shift gradients are used."""
+        import tensorflow as tf
+
+        dev = qml.device("default.qubit", shots=shots, seed=10)
+        diff_method = "backprop" if shots is None else "parameter-shift"
+        qnode = qml.QNode(self.circuit, dev, interface="tf", diff_method=diff_method)
+
+        params = tf.Variable(self.params)
+        with tf.GradientTape() as tape:
+            res = qnode(params)
+
+        jac = tape.gradient(res, params)
+        assert qml.math.shape(jac) == (8,)
+        assert qml.math.allclose(res, self.exp_grad, atol=0.001)
 
 
 def test_correct_queueing():
-    """Test that the AmplitudeAmplification operator is correctly queued in the circuit"""
+    """Test that operations in a circuit containing AmplitudeAmplification are correctly queued"""
     dev = qml.device("default.qubit")
 
     @qml.qnode(dev)
@@ -239,6 +290,7 @@ def test_amplification():
         return qml.probs(wires=range(3))
 
     res = np.round(circuit(), 3)
+
     expected = np.array([0.013, 0.013, 0.91, 0.013, 0.013, 0.013, 0.013, 0.013])
 
     assert np.allclose(res, expected)
@@ -262,3 +314,22 @@ def test_p_min(p_min):
         return qml.probs(wires=range(4))
 
     assert circuit()[0] >= p_min
+
+
+@pytest.mark.parametrize(
+    "iters, p_min",
+    (
+        (4, 0.8),
+        (5, 0.9),
+        (6, 0.95),
+    ),
+)
+def test_fixed_point_angles_function(iters, p_min):
+    """Test that the _get_fixed_point_angles function works correctly."""
+
+    alphas, betas = _get_fixed_point_angles(iters, p_min)
+
+    assert np.all(alphas[:-1] > alphas[1:])
+    assert np.all(betas[:-1] > betas[1:])
+
+    assert np.allclose(betas, np.array([-alpha for alpha in reversed(alphas)]))

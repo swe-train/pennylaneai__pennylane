@@ -22,10 +22,10 @@ from pennylane.operation import Operation
 import pennylane as qml
 
 
-def get_fixed_point_angles(iters, p_min):
+def _get_fixed_point_angles(iters, p_min):
     """
     Returns the angles needed for the fixed-point amplitude amplification algorithm.
-    The angles are computed using equation (11) of  `arXiv:1409.3305v2 <https://arxiv.org/abs/1409.3305>`__.
+    The angles are computed using equation (11) of `arXiv:1409.3305v2 <https://arxiv.org/abs/1409.3305>`__.
     """
 
     delta = np.sqrt(1 - p_min)
@@ -42,79 +42,74 @@ def get_fixed_point_angles(iters, p_min):
 class AmplitudeAmplification(Operation):
     r"""Applies amplitude amplification.
 
-    Given a state :math:`|\Psi\rangle = \alpha |\phi\rangle + \beta|\phi^{\perp}\rangle`, this subroutine amplifies the amplitude of the state :math:`|\phi\rangle`
+    Given a state :math:`|\Psi\rangle = \alpha |\phi\rangle + \beta|\phi^{\perp}\rangle`, this
+    subroutine amplifies the amplitude of the state :math:`|\phi\rangle` such that
 
     .. math::
 
-            \text{AmplitudeAmplification}(U, O)|\Psi\rangle \sim |\phi\rangle
+            \text{A}(U, O)|\Psi\rangle \sim |\phi\rangle.
 
-    The implementation of the algorithm is based on `[arXiv:quant-ph/0005055] <https://arxiv.org/abs/quant-ph/0005055>`__.
-    The template also unlocks advanced techniques such as fixed-point quantum search [`arXiv:1409.3305 <https://arxiv.org/abs/1409.3305>`__] and oblivious amplitude amplification [`arXiv:1312.1414 <https://arxiv.org/abs/1312.1414>`__] by reflecting on a subset of the wires.
+    The implementation of the algorithm is based on [`arXiv:quant-ph/0005055 <https://arxiv.org/abs/quant-ph/0005055>`__].
+    The template also unlocks advanced techniques such as fixed-point quantum search
+    [`arXiv:1409.3305 <https://arxiv.org/abs/1409.3305>`__] and oblivious amplitude amplification
+    [`arXiv:1312.1414 <https://arxiv.org/abs/1312.1414>`__], by reflecting on a subset of wires.
 
     Args:
-        U (Operator): Operator that prepares the state :math:`|\Psi\rangle`.
-        O (Operator): The oracle that flips the sign of the state :math:`|\phi\rangle` and does nothing to the state :math:`|\phi^{\perp}\rangle`.
-        iters (int): the number of iterations of the amplitude amplification subroutine. Default is 1.
-        fixed_point (bool): whether to use the fixed-point amplitude amplification algorithm. Default is False.
-        work_wire (int): the auxiliary wire to use for the fixed-point amplitude amplification algorithm. Default is None.
-        reflection_wires (Wires): the wires to reflect on. Default is the wires of U.
-        p_min (int): the lower bound for the probability of success in fixed-point amplitude amplification. Default is 0.9
+        U (Operator): the operator that prepares the state :math:`|\Psi\rangle`
+        O (Operator): the oracle that flips the sign of the state :math:`|\phi\rangle` and does nothing to the state :math:`|\phi^{\perp}\rangle`
+        iters (int): the number of iterations of the amplitude amplification subroutine, default is ``1``
+        fixed_point (bool): whether to use the fixed-point amplitude amplification algorithm, default is ``False``
+        work_wire (int): the auxiliary wire to use for the fixed-point amplitude amplification algorithm, default is ``None``
+        reflection_wires (Wires): the wires to reflect on, default is the wires of ``U``
+        p_min (int): the lower bound for the probability of success in fixed-point amplitude amplification, default is ``0.9``
 
     Raises:
-        ValueError: work_wire must be specified if ``fixed_point == True``.
-        ValueError: work_wire must be different from the wires of U.
+        ValueError: ``work_wire`` must be specified if ``fixed_point == True``.
+        ValueError: ``work_wire`` must be different from the wires of the oracle ``O``.
 
     **Example**
 
-    Amplification of state :math:`|2\rangle` using Grover's algorithm with 3 qubits:
+    Amplification of state :math:`|2\rangle` using Grover's algorithm with 3 qubits.
+    The state :math:`|\Psi\rangle` is constructed as a uniform superposition of basis states.
 
     .. code-block::
 
         @qml.prod
         def generator(wires):
-          for wire in wires:
-            qml.Hadamard(wires = wire)
+            for wire in wires:
+                qml.Hadamard(wires=wire)
 
-        U = generator(wires = range(3))
-        O = qml.FlipSign(2, wires = range(3))
+        U = generator(wires=range(3))
+        O = qml.FlipSign(2, wires=range(3))
 
         dev = qml.device("default.qubit")
 
         @qml.qnode(dev)
         def circuit():
 
-          generator(wires = range(3))
-          qml.AmplitudeAmplification(U, O, iters = 5, fixed_point=True, work_wire=3)
+            generator(wires=range(3))
+            qml.AmplitudeAmplification(U, O, iters=5, fixed_point=True, work_wire=3)
 
-          return qml.probs(wires = range(3))
+            return qml.probs(wires=range(3))
 
     .. code-block:: pycon
 
         >>> print(np.round(circuit(),3))
-        [0.009 0.009 0.94  0.009 0.009 0.009 0.009 0.009]
-
-
+        [0.013, 0.013, 0.91, 0.013, 0.013, 0.013, 0.013, 0.013]
     """
 
     def _flatten(self):
         data = (self.hyperparameters["U"], self.hyperparameters["O"])
         metadata = tuple(
-            value for key, value in self.hyperparameters.items() if key not in ["O", "U"]
+            (key, value) for key, value in self.hyperparameters.items() if key not in ["O", "U"]
         )
         return data, metadata
 
     @classmethod
     def _unflatten(cls, data, metadata):
         U, O = (data[0], data[1])
-        return cls(
-            U,
-            O,
-            iters=metadata[0],
-            fixed_point=metadata[1],
-            work_wire=metadata[2],
-            p_min=metadata[3],
-            reflection_wires=metadata[4],
-        )
+        hyperparams_dict = dict(metadata)
+        return cls(U, O, **hyperparams_dict)
 
     def __init__(
         self, U, O, iters=1, fixed_point=False, work_wire=None, p_min=0.9, reflection_wires=None
@@ -126,8 +121,8 @@ class AmplitudeAmplification(Operation):
         if fixed_point and work_wire is None:
             raise qml.wires.WireError("work_wire must be specified if fixed_point == True.")
 
-        if fixed_point and len(U.wires + qml.wires.Wires(work_wire)) == len(U.wires):
-            raise ValueError("work_wire must be different from the wires of U.")
+        if fixed_point and len(O.wires + qml.wires.Wires(work_wire)) == len(O.wires):
+            raise ValueError("work_wire must be different from the wires of O.")
 
         if fixed_point:
             wires = U.wires + qml.wires.Wires(work_wire)
@@ -146,19 +141,19 @@ class AmplitudeAmplification(Operation):
 
     # pylint:disable=arguments-differ
     @staticmethod
-    def compute_decomposition(*_, **hyperparameters):
-        U = hyperparameters["U"]
-        O = hyperparameters["O"]
-        iters = hyperparameters["iters"]
-        fixed_point = hyperparameters["fixed_point"]
-        work_wire = hyperparameters["work_wire"]
-        p_min = hyperparameters["p_min"]
-        reflection_wires = hyperparameters["reflection_wires"]
+    def compute_decomposition(**kwargs):
+        U = kwargs["U"]
+        O = kwargs["O"]
+        iters = kwargs["iters"]
+        fixed_point = kwargs["fixed_point"]
+        work_wire = kwargs["work_wire"]
+        p_min = kwargs["p_min"]
+        reflection_wires = kwargs["reflection_wires"]
 
         ops = []
 
         if fixed_point:
-            alphas, betas = get_fixed_point_angles(iters, p_min)
+            alphas, betas = _get_fixed_point_angles(iters, p_min)
 
             for iter in range(iters // 2):
                 ops.append(qml.Hadamard(wires=work_wire))
@@ -177,7 +172,6 @@ class AmplitudeAmplification(Operation):
 
         return ops
 
-    # pylint: disable=protected-access
     def queue(self, context=qml.QueuingManager):
         for op in [self.hyperparameters["U"], self.hyperparameters["O"]]:
             context.remove(op)

@@ -36,7 +36,13 @@ from pennylane.pauli import pauli_decompose
 from pennylane.resource import specs
 import pennylane.resource
 import pennylane.qchem
-from pennylane.fermi import FermiC, FermiA, jordan_wigner
+from pennylane.fermi import (
+    FermiC,
+    FermiA,
+    jordan_wigner,
+    parity_transform,
+    bravyi_kitaev,
+)
 from pennylane.qchem import (
     taper,
     symmetry_generators,
@@ -90,9 +96,6 @@ from pennylane.transforms import (
     compile,
     defer_measurements,
     dynamic_one_shot,
-    qfunc_transform,
-    op_transform,
-    single_tape_transform,
     quantum_monte_carlo,
     apply_controlled_Q,
     commutation_dag,
@@ -137,8 +140,6 @@ import pennylane.compiler
 
 import pennylane.data
 
-import pennylane.interfaces
-
 # Look for an existing configuration file
 default_config = Configuration("config.toml")
 
@@ -149,6 +150,18 @@ class QuantumFunctionError(Exception):
 
 class PennyLaneDeprecationWarning(UserWarning):
     """Warning raised when a PennyLane feature is being deprecated."""
+
+
+del globals()["Hamiltonian"]
+
+
+def __getattr__(name):
+    if name == "Hamiltonian":
+        if pennylane.operation.active_new_opmath():
+            return pennylane.ops.LinearCombination
+        return pennylane.ops.Hamiltonian
+
+    raise AttributeError(f"module 'pennylane' has no attribute '{name}'")
 
 
 def _get_device_entrypoints():
