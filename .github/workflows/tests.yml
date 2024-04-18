@@ -12,6 +12,8 @@ concurrency:
 jobs:
   tests:
     uses: ./.github/workflows/interface-unit-tests.yml
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
     with:
       branch: ${{ github.ref }}
 

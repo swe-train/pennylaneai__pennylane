@@ -65,6 +65,27 @@ def test_broadcasted_postselection(mocker):
     assert spy.call_count == 1
 
 
+def test_broadcasted_postselection_with_sample_error():
+    """Test that an error is raised if returning qml.sample if postselecting with broadcasting"""
+    tape = qml.tape.QuantumScript(
+        [qml.RX([0.1, 0.2], 0), MidMeasureMP(0, postselect=1)], [qml.sample(wires=0)], shots=10
+    )
+    dev = qml.device("default.qubit", shots=10)
+
+    with pytest.raises(ValueError, match="Returning qml.sample is not supported when"):
+        qml.defer_measurements(tape)
+
+    @qml.defer_measurements
+    @qml.qnode(dev)
+    def circuit():
+        qml.RX([0.1, 0.2], 0)
+        qml.measure(0, postselect=1)
+        return qml.sample(wires=0)
+
+    with pytest.raises(ValueError, match="Returning qml.sample is not supported when"):
+        _ = circuit()
+
+
 def test_postselection_error_with_wrong_device():
     """Test that an error is raised when postselection is used with a device
     other than `default.qubit`."""
@@ -748,12 +769,7 @@ class TestConditionalOperations:
         [
             "default.qubit",
             "default.mixed",
-            pytest.param(
-                "lightning.qubit",
-                marks=pytest.mark.xfail(
-                    reason="Lightning adjoint decomposition needs to be updated"
-                ),
-            ),
+            "lightning.qubit",
         ],
     )
     @pytest.mark.parametrize("ops", [(qml.RX, qml.CRX), (qml.RY, qml.CRY), (qml.RZ, qml.CRZ)])
@@ -857,12 +873,7 @@ class TestConditionalOperations:
         [
             "default.qubit",
             "default.mixed",
-            pytest.param(
-                "lightning.qubit",
-                marks=pytest.mark.xfail(
-                    reason="Lightning adjoint decomposition needs to be updated"
-                ),
-            ),
+            "lightning.qubit",
         ],
     )
     @pytest.mark.parametrize("ops", [(qml.RX, qml.CRX), (qml.RY, qml.CRY), (qml.RZ, qml.CRZ)])
@@ -899,12 +910,7 @@ class TestConditionalOperations:
         [
             "default.qubit",
             "default.mixed",
-            pytest.param(
-                "lightning.qubit",
-                marks=pytest.mark.xfail(
-                    reason="Lightning adjoint decomposition needs to be updated"
-                ),
-            ),
+            "lightning.qubit",
         ],
     )
     def test_conditional_rotations_with_else(self, device):
@@ -980,16 +986,7 @@ class TestConditionalOperations:
 
     @pytest.mark.parametrize(
         "device",
-        [
-            "default.qubit",
-            "default.mixed",
-            pytest.param(
-                "lightning.qubit",
-                marks=pytest.mark.xfail(
-                    reason="Lightning adjoint decomposition needs to be updated"
-                ),
-            ),
-        ],
+        ["default.qubit", "default.mixed", "lightning.qubit"],
     )
     def test_cond_qfunc(self, device):
         """Test that a qfunc can also used with qml.cond."""
@@ -1026,16 +1023,7 @@ class TestConditionalOperations:
 
     @pytest.mark.parametrize(
         "device",
-        [
-            "default.qubit",
-            "default.mixed",
-            pytest.param(
-                "lightning.qubit",
-                marks=pytest.mark.xfail(
-                    reason="Lightning adjoint decomposition needs to be updated"
-                ),
-            ),
-        ],
+        ["default.qubit", "default.mixed", "lightning.qubit"],
     )
     def test_cond_qfunc_with_else(self, device):
         """Test that a qfunc can also used with qml.cond even when an else
