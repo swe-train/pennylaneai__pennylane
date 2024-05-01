@@ -18,6 +18,12 @@ import pennylane as qml
 from pennylane import DeviceError
 
 
+def _device_supports_snapshots(device) -> bool:
+    if isinstance(device, qml.devices.LegacyDevice):
+        return "Snapshot" in device.operations
+    return hasattr(device, "_debugger")
+
+
 class _Debugger:
     """A debugging context manager.
 
@@ -30,13 +36,7 @@ class _Debugger:
 
     def __init__(self, dev):
         # old device API: check if Snapshot is supported
-        if isinstance(dev, qml.devices.LegacyDevice) and "Snapshot" not in dev.operations:
-            raise DeviceError("Device does not support snapshots.")
-
-        # new device API: check if it's the simulator device
-        if isinstance(dev, qml.devices.Device) and not isinstance(
-            dev, (qml.devices.DefaultQubit, qml.devices.DefaultClifford)
-        ):
+        if not _device_supports_snapshots(dev):
             raise DeviceError("Device does not support snapshots.")
 
         self.snapshots = {}
@@ -53,7 +53,8 @@ class _Debugger:
         self.device._debugger = None
 
 
-def snapshots(qnode):
+@qml.transform
+def snapshots(tape):
     r"""Create a function that retrieves snapshot results from a QNode.
 
     Args:
@@ -87,6 +88,13 @@ def snapshots(qnode):
     2: array([0.70710678+0.j, 0.        +0.j, 0.        +0.j, 0.70710678+0.j]),
     'execution_results': 0.0}
     """
+    raise qml.DeviceError("Device does not support snapshots.")
+
+
+@snapshots.custom_qnode_transform
+def _(self, qnode, targs, tkwargs):
+    if not _device_supports_snapshots(qnode.device):
+        return self.default_qnode_transform(qnode, targs, tkwargs)
 
     def get_snapshots(*args, **kwargs):
         old_interface = qnode.interface
