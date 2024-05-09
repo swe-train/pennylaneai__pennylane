@@ -315,6 +315,11 @@ class MeasurementProcess(ABC):
                 return qml.wires.Wires.all_wires([m.wires for m in self.mv])
             return self.mv.wires
 
+        # from pennylane.compiler import compiler
+        # if active_jit := compiler.active_compiler():
+        #     if "DynamicJaxprTracer" in str(type(self.obs)):
+        #         return Wires([])
+        
         if self.obs is not None:
             return self.obs.wires
 

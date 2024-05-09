@@ -195,8 +195,10 @@ def init_auxiliary_tape(circuit: qml.tape.QuantumScript):
             else:
                 new_measurements.append(m)
     for op in circuit:
-        if is_mcm(op):
+        if isinstance(op, MidMeasureMP):
             new_measurements.append(qml.sample(MeasurementValue([op], lambda res: res)))
+        if "MidCircuitMeasure" in str(type(op)):
+            new_measurements.append(qml.sample(op.out_classical_tracers[0]))
 
     return qml.tape.QuantumScript(
         circuit.operations,
@@ -242,7 +244,7 @@ def parse_native_mid_circuit_measurements(
     )
     mcm_samples = qml.math.array(
         [[res] if single_measurement else res[-n_mcms::] for res in results], like=interface
-    )
+    ).reshape((-1, n_mcms))
     has_postselect = qml.math.array([op.postselect is not None for op in all_mcms]).reshape((1, -1))
     postselect = qml.math.array(
         [0 if op.postselect is None else op.postselect for op in all_mcms]
@@ -252,6 +254,13 @@ def parse_native_mid_circuit_measurements(
     mid_meas = [op for op in circuit.operations if is_mcm(op)]
     mcm_samples = [mcm_samples[:, i : i + 1] for i in range(n_mcms)]
     mcm_samples = dict((k, v) for k, v in zip(mid_meas, mcm_samples))
+
+    # from pennylane.compiler import compiler
+    # active_jit = compiler.active_compiler()
+    # if active_jit == "catalyst":
+    #     keys = list(mcm_samples.keys())
+    #     values = list(mcm_samples.values())
+    #     mcm_samples = dict((keys[i], values[i - 1]) for i in range(1, len(keys), 2))
 
     normalized_meas = []
     for i, m in enumerate(circuit.measurements):
@@ -266,7 +275,7 @@ def parse_native_mid_circuit_measurements(
         elif interface != "jax" and not has_valid:
             meas = measurement_with_no_shots(m)
         else:
-            result = qml.math.array([res[i] for res in results], like=interface)
+            result = qml.math.squeeze(qml.math.array([res[i] for res in results], like=interface))
             meas = gather_non_mcm(m, result, is_valid)
         if isinstance(m, SampleMP):
             meas = qml.math.squeeze(meas)
